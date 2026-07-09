@@ -17,14 +17,15 @@ def die(msg):
     sys.exit("error: " + msg)
 
 
-def report(lost, base):  # lost[i] < 0 means the port could not be hole-punched
+def report(lost, base, lports):  # lost[i] < 0 means the port could not be hole-punched
     tested = [n for n in lost if n >= 0]
     total, worst = sum(tested), len(tested) * LOOPS or 1
     print(f"\ntotal lost: {total}/{worst} packets ({100 * total / worst:.1f}%)")
     def line(i, n):
+        p = f"lport {lports[i]} rport {base + i}"
         if n < 0:
-            return f"  port {base + i}: unreachable, hole punch failed"
-        return f"  port {base + i}: {n} lost ({100 * n / LOOPS:.1f}%)"
+            return f"  {p}: unreachable, hole punch failed"
+        return f"  {p}: {n} lost ({100 * n / LOOPS:.1f}%)"
     ports = list(enumerate(lost))  # enumerate order is port order (base + i ascending)
     print("unreachable:")
     for i, n in ports:
@@ -49,7 +50,10 @@ def report(lost, base):  # lost[i] < 0 means the port could not be hole-punched
             text = "---" if n < 0 else "XXX" if n >= 100 else f"{n:>3d}" if n > 0 else " · "
             cells += f"\x1b[{style}m{text}\x1b[0m "
         print(cells)
-    print(f"port = {base} + row + column")
+    legend = f"remote port = {base} + row + column"
+    if lports == list(range(lports[0], lports[0] + len(lports))):
+        legend += f", local = {lports[0]} + row + column"
+    print(legend)
 
 
 def main():
@@ -121,6 +125,7 @@ def main():
         if not result or result[0] != "RESULT":
             die("no result from server")
         lost = [LOOPS - int(n) for n in result[1:]]
+        lports = [udp.getsockname()[1]] * nports
     else:
         socks = [usock(lport and lport + i) for i in range(nports)]
         index = {s: i for i, s in enumerate(socks)}
@@ -152,7 +157,8 @@ def main():
                     counts[index[s]] += 1
             print(f"\rreceived {sum(counts)} packets", end="", flush=True)
         lost = [-1 if i in missing else LOOPS - n for i, n in enumerate(counts)]
-    report(lost, base)
+        lports = [s.getsockname()[1] for s in socks]
+    report(lost, base, lports)
 
 
 if __name__ == "__main__":
